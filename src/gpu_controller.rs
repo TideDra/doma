@@ -3,7 +3,7 @@ use anyhow::{Error, Result, Context};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::time::{Duration,Instant};
+use std::time::{Duration,Instant,SystemTime,UNIX_EPOCH};
 
 const KERBEL_PTX: &str = include_str!("cuda/kernel.ptx");
 //static KERNEL_MODULE: LazyLock<Module> = LazyLock::new(|| Module::from_ptx(KERBEL_PTX, &[]).unwrap());
@@ -77,11 +77,14 @@ impl GPUController {
         let func = self.module.get_function("busy_loop").with_context(|| "Failed to get function")?;
         let nvml_device = self.nvml.device_by_index(self.device_id).with_context(|| "Failed to get NVML device")?;
         let mut self_util = self.target_util;
-        let mut last_seen_timestamp = Instant::now();
+        let mut last_seen_timestamp = SystemTime::now();
         while self.signal.load(Ordering::Relaxed) {
-            let toc = Instant::now();
-            if toc.duration_since(last_seen_timestamp).as_secs() >= 2 {
-                let process_utilization_stats = nvml_device.process_utilization_stats(None).with_context(|| "Failed to get process utilization stats")?;
+            let toc = SystemTime::now();
+            if toc.duration_since(last_seen_timestamp).unwrap_or_default().as_secs() >= 2 {
+                let timestamp_micros = last_seen_timestamp.duration_since(UNIX_EPOCH)
+                    .with_context(|| "Failed to get Unix timestamp")?
+                    .as_micros() as u64;
+                let process_utilization_stats = nvml_device.process_utilization_stats(Some(timestamp_micros)).with_context(|| "Failed to get process utilization stats")?;
                 let sum_of_util = process_utilization_stats.iter().map(|stat| stat.sm_util).sum::<u32>();
                 let others_util = sum_of_util.saturating_sub(self_util);
                 self_util = self.target_util.saturating_sub(others_util);
