@@ -1,0 +1,14 @@
+[package]
+name = "doma_rs"
+version = "0.1.0"
+edition = "2024"
+description = "Guarantee the minimum GPU utilization percentage."
+
+[dependencies]
+anyhow = "1.0.100"
+clap = { version = "4.5.51", features = ["derive"] }
+ctrlc = "3.5.1"
+cust = "0.3.2"
+env_logger = "0.11.8"
+log = "0.4.28"
+nvml-wrapper = "0.11.0"
