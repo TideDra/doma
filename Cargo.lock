@@ -272,7 +272,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "doma_rs"
+name = "doma"
 version = "0.1.0"
 dependencies = [
  "anyhow",
