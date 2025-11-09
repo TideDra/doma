@@ -2,7 +2,11 @@
 name = "doma"
 version = "0.1.0"
 edition = "2024"
-description = "Guarantee the minimum GPU utilization percentage."
+description = "Guarantee the minimum of GPU utilization percentage."
+authors = ["TideDra <gearyzhang@outlook.com>"]
+license = "MIT"
+repository = "https://github.com/TideDra/doma"
+documentation = "https://github.com/TideDra/doma/blob/main/README.md"
 
 [dependencies]
 anyhow = "1.0.100"
