@@ -19,6 +19,7 @@ jobs:
       id: cuda-toolkit
       with:
         cuda: '12.6.3'
+        method: 'network'
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose
