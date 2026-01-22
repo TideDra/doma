@@ -84,8 +84,12 @@ impl GPUController {
                 let timestamp_micros = last_seen_timestamp.duration_since(UNIX_EPOCH)
                     .with_context(|| "Failed to get Unix timestamp")?
                     .as_micros() as u64;
-                let process_utilization_stats = nvml_device.process_utilization_stats(Some(timestamp_micros)).with_context(|| "Failed to get process utilization stats")?;
-                let sum_of_util = process_utilization_stats.iter().map(|stat| stat.sm_util).sum::<u32>();
+                let process_utilization_stats = nvml_device.process_utilization_stats(Some(timestamp_micros));
+                if process_utilization_stats.is_err() {
+                    std::thread::sleep(Duration::from_secs(1));
+                    continue;
+                }
+                let sum_of_util = process_utilization_stats.unwrap().iter().map(|stat| stat.sm_util).sum::<u32>();
                 let others_util = sum_of_util.saturating_sub(self_util);
                 self_util = self.target_util.saturating_sub(others_util);
                 last_seen_timestamp = toc;
