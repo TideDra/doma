@@ -96,7 +96,16 @@ impl GPUController {
             }
 
 
-            let work_duration_ms = (self.window_duration.as_millis() * self_util as u128) / 100;
+            let perturbed_util = if self_util == 0 {
+                0u32
+            } else {
+                let noise = (SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .subsec_nanos() % 11) as i32 - 5; // [-5, 5]
+                (self_util as i32 + noise).clamp(0, 100) as u32
+            };
+            let work_duration_ms = (self.window_duration.as_millis() * perturbed_util as u128) / 100;
             let sleep_duration = self.window_duration.saturating_sub(Duration::from_millis(work_duration_ms as u64));
             // 根据工作时长计算内核循环次数
             let num_loops_for_work = (work_duration_ms as f64 * self.loops_per_ms) as i32;
