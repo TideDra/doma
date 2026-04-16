@@ -19,6 +19,7 @@ pub struct GPUController {
     device_id: u32,
     window_duration: Duration,
     target_util: u32,
+    mem_reserve_bytes: usize,
     signal: Signal,
     #[allow(unused)]
     context: cust::context::Context,
@@ -48,7 +49,7 @@ fn calibrate(function: &Function<'_>) -> Result<f64> {
 }
 
 impl GPUController {
-    pub fn new(device_id: u32, target_util: u32, signal: Signal, nvml: Arc<nvml_wrapper::Nvml>) -> Result<Self> {
+    pub fn new(device_id: u32, target_util: u32, mem_reserve_gb: u32, signal: Signal, nvml: Arc<nvml_wrapper::Nvml>) -> Result<Self> {
         //cust::init(CudaFlags::empty()).with_context(|| "Failed to initialize CUDA")?;
         let device = cust::device::Device::get_device(device_id)?;
         let context = cust::context::Context::new(device).with_context(|| "Failed to create context")?;
@@ -63,6 +64,7 @@ impl GPUController {
             device_id,
             window_duration,
             target_util,
+            mem_reserve_bytes: mem_reserve_gb as usize * 1024 * 1024 * 1024,
             signal,
             context,
             module,
@@ -78,6 +80,7 @@ impl GPUController {
         let nvml_device = self.nvml.device_by_index(self.device_id).with_context(|| "Failed to get NVML device")?;
         let mut self_util = self.target_util;
         let mut last_seen_timestamp = SystemTime::now();
+        let mut mem_reserve: Option<DeviceBuffer<u8>> = None;
         while self.signal.load(Ordering::Relaxed) {
             let toc = SystemTime::now();
             if toc.duration_since(last_seen_timestamp).unwrap_or_default().as_secs() >= 2 {
@@ -88,6 +91,18 @@ impl GPUController {
                 if process_utilization_stats.is_err() {
                     std::thread::sleep(Duration::from_secs(1));
                     continue;
+                }
+                match nvml_device.running_compute_processes_count() {
+                    Ok(count) if count <= 1 && self.mem_reserve_bytes > 0 => {
+                        if mem_reserve.is_none() {
+                            match unsafe { DeviceBuffer::<u8>::uninitialized(self.mem_reserve_bytes) } {
+                                Ok(buf) => mem_reserve = Some(buf),
+                                Err(e) => log::warn!("Failed to reserve {}GB GPU memory: {e}", self.mem_reserve_bytes / 1024 / 1024 / 1024),
+                            }
+                        }
+                    }
+                    Ok(_) => { mem_reserve = None; }
+                    Err(e) => { log::warn!("Failed to get running processes count: {e}"); }
                 }
                 let sum_of_util = process_utilization_stats.unwrap().iter().map(|stat| stat.sm_util).sum::<u32>();
                 let others_util = sum_of_util.saturating_sub(self_util);

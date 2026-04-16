@@ -16,6 +16,9 @@ struct Args {
     /// GPU IDs to control, separated by commas
     #[arg(short, long, value_delimiter = ',')]
     device_ids: Option<Vec<u32>>,
+    /// GPU memory to reserve (in GB) when other processes are detected
+    #[arg(short, long, default_value_t = 0)]
+    mem_reserve: u32,
 }
 
 
@@ -37,7 +40,7 @@ fn main() -> Result<()> {
         signals.push(signal.clone());
         let nvml_clone = nvml.clone();
         let handle =std::thread::spawn(move || {
-            let gpu_controller = GPUController::new(i, args.min_util, signal, nvml_clone).unwrap();
+            let gpu_controller = GPUController::new(i, args.min_util, args.mem_reserve, signal, nvml_clone).unwrap();
             let result = gpu_controller.hold_gpu();
             if let Err(e) = result {
                 log::error!("Failed to hold GPU {}: {}", i, e);
