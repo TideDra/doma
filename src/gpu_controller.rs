@@ -59,7 +59,17 @@ unsafe impl Sync for CudaApi {}
 
 impl CudaApi {
     pub fn load() -> Result<Self> {
-        let lib = open_library(&["libcuda.so.1", "libcuda.so"])?;
+        let lib = open_library(&[
+            "libcuda.so.1",
+            "libcuda.so",
+            "/usr/lib/x86_64-linux-gnu/libcuda.so.1",
+            "/usr/lib/x86_64-linux-gnu/libcuda.so",
+            "/usr/lib64/libcuda.so.1",
+            "/usr/lib64/libcuda.so",
+            "/usr/lib/wsl/lib/libcuda.so.1",
+            "/usr/local/cuda/compat/libcuda.so.1",
+            "/usr/local/cuda/compat/libcuda.so",
+        ])?;
         Ok(Self {
             cu_init: load_symbol(&lib, b"cuInit\0")?,
             cu_device_get_count: load_symbol(&lib, b"cuDeviceGetCount\0")?,
