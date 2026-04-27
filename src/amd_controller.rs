@@ -2,7 +2,6 @@ use crate::dynlib::{c_string, load_symbol, open_library};
 use crate::signal::Signal;
 use anyhow::{Context, Result, bail};
 use libloading::Library;
-use std::collections::HashMap;
 use std::ffi::CString;
 use std::os::raw::{c_char, c_int, c_uint, c_void};
 use std::ptr;
@@ -255,7 +254,6 @@ impl AmdGpuController {
             HipDeviceMemory::new_zeroed(self.backend.clone(), std::mem::size_of::<f32>())?;
         let mut self_util = self.target_util;
         let mut last_seen = Instant::now();
-        let mut process_sampler = ProcessUsageSampler::new(std::process::id());
         let mut mem_reserve: Option<HipDeviceMemory> = None;
 
         while self.signal.load(Ordering::Relaxed) {
@@ -307,14 +305,7 @@ impl AmdGpuController {
                     }
                 }
 
-                let process_others_util = processes
-                    .as_ref()
-                    .and_then(|processes| process_sampler.sample(now, processes));
-                let total_others_util = total_util.saturating_sub(self_util);
-                let others_util = process_others_util
-                    .unwrap_or(total_others_util)
-                    .max(total_others_util)
-                    .min(100);
+                let others_util = total_util.saturating_sub(self_util);
                 self_util = self.target_util.saturating_sub(others_util);
                 last_seen = now;
             }
@@ -413,48 +404,6 @@ fn load_embedded_kernel(backend: Arc<AmdBackend>) -> Result<HipModuleHandle> {
         .context("Failed to load HIP module")?;
 
     Ok(HipModuleHandle { module, backend })
-}
-
-struct ProcessUsageSampler {
-    current_pid: u32,
-    last_seen: Option<(Instant, HashMap<u32, u64>)>,
-}
-
-impl ProcessUsageSampler {
-    fn new(current_pid: u32) -> Self {
-        Self {
-            current_pid,
-            last_seen: None,
-        }
-    }
-
-    fn sample(&mut self, now: Instant, processes: &[AmdSmiProcInfo]) -> Option<u32> {
-        let current_usage = processes
-            .iter()
-            .map(|process| (process.pid, process.engine_usage.gfx))
-            .collect::<HashMap<_, _>>();
-
-        let utilization = self.last_seen.as_ref().and_then(|(last_seen, last_usage)| {
-            let elapsed_ns = now.duration_since(*last_seen).as_nanos();
-            if elapsed_ns == 0 {
-                return None;
-            }
-
-            let other_busy_ns = current_usage
-                .iter()
-                .filter(|(pid, _)| **pid != self.current_pid)
-                .filter_map(|(pid, usage)| {
-                    last_usage.get(pid).map(|last| usage.saturating_sub(*last))
-                })
-                .map(u128::from)
-                .sum::<u128>();
-
-            Some(((other_busy_ns * 100) / elapsed_ns).min(100) as u32)
-        });
-
-        self.last_seen = Some((now, current_usage));
-        utilization
-    }
 }
 
 struct HipDeviceMemory {
