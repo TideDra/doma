@@ -3,10 +3,10 @@ use clap::{Parser, ValueEnum};
 use std::sync::atomic::Ordering;
 mod amd_controller;
 mod dynlib;
-mod gpu_controller;
+mod nvidia_controller;
 mod signal;
 use env_logger::{Builder, Target};
-use gpu_controller::{CudaApi, GPUController};
+use nvidia_controller::{CudaApi, GPUController};
 use signal::new_signal;
 use std::sync::Arc;
 
