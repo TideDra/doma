@@ -1,5 +1,5 @@
-use crate::Signal;
 use crate::dynlib::{c_string, load_symbol, open_library};
+use crate::utils::Signal;
 use anyhow::{Context, Result, bail};
 use libloading::Library;
 use std::ffi::CString;

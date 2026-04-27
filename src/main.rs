@@ -1,18 +1,14 @@
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 mod amd_controller;
 mod dynlib;
 mod nvidia_controller;
+mod utils;
 use env_logger::{Builder, Target};
 use nvidia_controller::{CudaApi, GPUController};
-
-pub type Signal = Arc<AtomicBool>;
-
-fn new_signal() -> Signal {
-    Arc::new(AtomicBool::new(true))
-}
+use utils::{Signal, new_signal};
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum Backend {
