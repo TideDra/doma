@@ -1,14 +1,18 @@
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
-use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 mod amd_controller;
 mod dynlib;
 mod nvidia_controller;
-mod signal;
 use env_logger::{Builder, Target};
 use nvidia_controller::{CudaApi, GPUController};
-use signal::new_signal;
-use std::sync::Arc;
+
+pub type Signal = Arc<AtomicBool>;
+
+fn new_signal() -> Signal {
+    Arc::new(AtomicBool::new(true))
+}
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum Backend {
@@ -144,7 +148,7 @@ fn run_amd(args: &Args) -> Result<()> {
 }
 
 fn wait_for_ctrl_c_and_join(
-    signals: Vec<signal::Signal>,
+    signals: Vec<Signal>,
     handles: Vec<std::thread::JoinHandle<()>>,
 ) -> Result<()> {
     ctrlc::set_handler(move || {
