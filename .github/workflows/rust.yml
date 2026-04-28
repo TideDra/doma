@@ -15,11 +15,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: Jimver/cuda-toolkit@v0.2.29
-      id: cuda-toolkit
-      with:
-        cuda: '12.6.3'
-        method: 'network'
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose
