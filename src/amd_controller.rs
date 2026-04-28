@@ -1,5 +1,5 @@
 use crate::dynlib::{c_string, load_symbol, open_library};
-use crate::utils::Signal;
+use crate::utils::{Signal, process_exists};
 use anyhow::{Context, Result, bail};
 use libloading::Library;
 use std::ffi::CString;
@@ -191,8 +191,26 @@ impl AmdBackend {
         self.smi.gpu_activity(device.handle)
     }
 
-    fn gpu_processes(&self, device: AmdDevice) -> Result<Vec<AmdSmiProcInfo>> {
-        self.smi.gpu_processes(device.handle)
+    fn has_running_other_gpu_processes(&self, device: AmdDevice) -> Result<bool> {
+        let current_pid = std::process::id();
+        for process in self.smi.gpu_processes(device.handle)? {
+            if process.pid == current_pid {
+                continue;
+            }
+
+            if process_exists(process.pid)
+                .with_context(|| format!("Failed to check whether PID {} exists", process.pid))?
+            {
+                return Ok(true);
+            }
+
+            log::debug!(
+                "Ignoring stale AMD SMI GPU process entry for PID {}",
+                process.pid
+            );
+        }
+
+        Ok(false)
     }
 }
 
@@ -271,20 +289,9 @@ impl AmdGpuController {
                     }
                 };
 
-                let processes = match self.backend.gpu_processes(self.device) {
-                    Ok(processes) => Some(processes),
-                    Err(e) => {
-                        log::warn!(
-                            "Failed to query AMD GPU {} process list: {e:#}",
-                            self.device_id
-                        );
-                        None
-                    }
-                };
-
                 if self.mem_reserve_bytes > 0 {
-                    match processes.as_ref().map(|processes| processes.len()) {
-                        Some(count) if count <= 1 => {
+                    match self.backend.has_running_other_gpu_processes(self.device) {
+                        Ok(false) => {
                             if mem_reserve.is_none() {
                                 match HipDeviceMemory::new(
                                     self.backend.clone(),
@@ -298,10 +305,13 @@ impl AmdGpuController {
                                 }
                             }
                         }
-                        Some(_) => {
+                        Ok(true) => {
                             mem_reserve = None;
                         }
-                        None => {}
+                        Err(e) => log::warn!(
+                            "Failed to query AMD GPU {} process list: {e:#}",
+                            self.device_id
+                        ),
                     }
                 }
 
