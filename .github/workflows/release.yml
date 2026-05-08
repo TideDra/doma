@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY_NAME: doma
+  TARGET: x86_64-unknown-linux-musl
+
+jobs:
+  release:
+    name: Build and release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install musl toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends musl-tools
+          rustup target add "$TARGET"
+
+      - name: Build release binary
+        run: cargo build --release --locked --target "$TARGET"
+
+      - name: Package release assets
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF_NAME}"
+          package="${BINARY_NAME}-${tag}-${TARGET}"
+
+          mkdir -p "dist/${package}"
+          cp "target/${TARGET}/release/${BINARY_NAME}" "dist/${package}/${BINARY_NAME}"
+          strip "dist/${package}/${BINARY_NAME}"
+          cp README.md "dist/${package}/README.md"
+
+          tar -C dist -czf "dist/${package}.tar.gz" "${package}"
+          sha256sum "dist/${package}.tar.gz" > "dist/${package}.tar.gz.sha256"
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF_NAME}"
+          package="${BINARY_NAME}-${tag}-${TARGET}"
+
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            gh release upload "${tag}" --clobber \
+              "dist/${package}.tar.gz" \
+              "dist/${package}.tar.gz.sha256"
+          else
+            gh release create "${tag}" \
+              --verify-tag \
+              --title "${tag}" \
+              --notes "Release ${tag}" \
+              "dist/${package}.tar.gz" \
+              "dist/${package}.tar.gz.sha256"
+          fi
