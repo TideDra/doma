@@ -121,10 +121,6 @@ impl AmdBackend {
         Ok(backend)
     }
 
-    pub fn device_count(&self) -> usize {
-        self.devices.len()
-    }
-
     pub fn device_ids(&self) -> Vec<u32> {
         self.devices.iter().map(|device| device.hip_id).collect()
     }
@@ -356,6 +352,29 @@ impl AmdGpuController {
 
         Ok(())
     }
+}
+
+pub fn health_check_device(device_id: u32) -> Result<()> {
+    let backend = Arc::new(AmdBackend::new()?);
+    let device = backend.device(device_id)?;
+    backend
+        .hip
+        .set_device(device.hip_id)
+        .with_context(|| format!("Failed to select AMD GPU {device_id}"))?;
+
+    let module = load_embedded_kernel(backend.clone()).context("Failed to load HIP kernel")?;
+    let function = module
+        .function("busy_loop")
+        .context("Failed to get HIP kernel function")?;
+    let stream = HipStreamHandle::new(backend.clone())?;
+    let dummy_data = HipDeviceMemory::new_zeroed(backend.clone(), std::mem::size_of::<f32>())?;
+
+    for _ in 0..32 {
+        launch_busy_loop(&backend, function, stream.raw(), dummy_data.ptr(), 100_000)?;
+        stream.synchronize()?;
+    }
+
+    Ok(())
 }
 
 fn calibrate(backend: Arc<AmdBackend>, function: HipFunction) -> Result<f64> {
